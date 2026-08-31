@@ -12,7 +12,50 @@ function publicState(s:any){return{game:s.game,winning:s.winning,players:s.playe
 function refill(s:any,p:number){while(s.players[p].hand.length<6){if(!s.deck.length){if(!s.used.length)break;s.deck=s.used.splice(0);for(let i=s.deck.length-1;i;i--){const j=Math.floor(Math.random()*(i+1));[s.deck[i],s.deck[j]]=[s.deck[j],s.deck[i]]}}s.players[p].hand.push(s.deck.pop())}}
 function broadcast(r:Room){const msg=JSON.stringify({type:'state',state:publicState(r.state)});r.clients.forEach(c=>c?.send(msg))}
 function err(c:WebSocket,m:string){c.send(JSON.stringify({type:'error',message:m}))}
-function action(r:Room,pi:number,a:any){const s=r.state;if(a.kind==='rematch'&&s.over){r.state=init(r.winning);broadcast(r);return}if(s.over||s.current!==pi)return;const p=s.players[pi];if(a.kind==='finish'){refill(s,pi);s.combo[pi]=0;s.current=1-pi;s.log.unshift(`${p.name} finished the turn.`);broadcast(r);return}if(a.kind==='discard'){const inds=[...new Set((a.indices||[]).filter((i:number)=>Number.isInteger(i)&&i>=0&&i<p.hand.length))];if(!inds.length||inds.length>4)return err(r.clients[pi]!, 'Select 1–4 cards.');const cards=p.hand.filter((_:any,i:number)=>inds.includes(i));p.hand=p.hand.filter((_:any,i:number)=>!inds.includes(i));s.used.push(...cards);refill(s,pi);s.combo[pi]=0;s.current=1-pi;s.log.unshift(`${p.name} discarded ${cards.length} card(s).`);broadcast(r);return}if(a.kind==='play'){const ni=a.node,inds=[...new Set((a.indices||[]).filter((i:number)=>Number.isInteger(i)&&i>=0&&i<p.hand.length))];if(!Number.isInteger(ni)||!s.nodes[ni]||!inds.length||inds.length>4)return err(r.clients[pi]!, 'Invalid selection.');const cards=[s.nodes[ni],...inds.map((i:number)=>p.hand[i])];const type=classify(cards);if(!type)return err(r.clients[pi]!, 'Selected cards do not form a scoring hand.');const withoutNode=classify(cards.slice(1));if(withoutNode===type)return err(r.clients[pi]!, 'The node card must be part of the scoring hand.');const base=pts[type];const combo=s.combo[pi]||0;const mult=[1,1.5,2,3][combo]||3;p.score+=base*mult;s.combo[pi]++;s.used.push(...cards);p.hand=p.hand.filter((_:any,i:number)=>!inds.includes(i));s.nodes[ni]=null;s.log.unshift(`${p.name} played ${type} for ${base*mult} points.`);if(p.score>=s.winning){s.over=true;s.winner=pi;s.log.unshift(`${p.name} wins!`);broadcast(r);return}if(s.nodes.every((x:any)=>!x)){s.nodes=[s.deck.pop()!,s.deck.pop()!,s.deck.pop()!,s.deck.pop()!];s.round++;s.current=1-pi;s.players.forEach((_:any,i:number)=>{s.combo[i]=0;refill(s,i)});s.log.unshift(`Round ${s.round} started.`)}broadcast(r)}}
+function action(r:Room,pi:number,a:any){
+  const s=r.state;
+  if(a.kind==='rematch'&&s.over){r.state=init(r.winning);broadcast(r);return}
+  if(s.over||s.current!==pi)return;
+  const p=s.players[pi];
+  if(a.kind==='finish'){
+    refill(s,pi);s.combo[pi]=0;s.current=1-pi;
+    s.log.unshift(`${p.name} finished the turn.`);broadcast(r);return;
+  }
+  if(a.kind==='discard'){
+    const raw:Array<unknown>=Array.isArray(a.indices)?a.indices:[];
+    const inds:number[]=[...new Set(raw.filter((i):i is number=>Number.isInteger(i)&&i>=0&&i<p.hand.length))];
+    if(!inds.length||inds.length>4)return err(r.clients[pi]!, 'Select 1–4 cards.');
+    const cards=p.hand.filter((_:Card,i:number)=>inds.includes(i));
+    p.hand=p.hand.filter((_:Card,i:number)=>!inds.includes(i));
+    s.used.push(...cards);refill(s,pi);s.combo[pi]=0;s.current=1-pi;
+    s.log.unshift(`${p.name} discarded ${cards.length} card(s).`);broadcast(r);return;
+  }
+  if(a.kind==='play'){
+    const ni=a.node;
+    const raw:Array<unknown>=Array.isArray(a.indices)?a.indices:[];
+    const inds:number[]=[...new Set(raw.filter((i):i is number=>Number.isInteger(i)&&i>=0&&i<p.hand.length))];
+    if(!Number.isInteger(ni)||!s.nodes[ni]||!inds.length||inds.length>4)return err(r.clients[pi]!, 'Invalid selection.');
+    const cards:Card[]=[s.nodes[ni] as Card,...inds.map(i=>p.hand[i])];
+    const type=classify(cards);
+    if(!type)return err(r.clients[pi]!, 'Selected cards do not form a scoring hand.');
+    const withoutNode=classify(cards.slice(1));
+    if(withoutNode===type)return err(r.clients[pi]!, 'The node card must be part of the scoring hand.');
+    const base=pts[type];
+    const combo=s.combo[pi]||0;
+    const mult=[1,1.5,2,3][combo]||3;
+    const gained=base*mult;
+    p.score+=gained;s.combo[pi]++;
+    s.used.push(...cards);p.hand=p.hand.filter((_:Card,i:number)=>!inds.includes(i));s.nodes[ni]=null;
+    s.log.unshift(`${p.name} played ${type} for ${gained} points.`);
+    if(p.score>=s.winning){s.over=true;s.winner=pi;s.log.unshift(`${p.name} wins!`);broadcast(r);return}
+    if(s.nodes.every((x:Card|null)=>!x)){
+      s.nodes=[s.deck.pop()!,s.deck.pop()!,s.deck.pop()!,s.deck.pop()!];
+      s.round++;s.current=1-pi;s.players.forEach((_:P,i:number)=>{s.combo[i]=0;refill(s,i)});
+      s.log.unshift(`Round ${s.round} started.`);
+    }
+    broadcast(r);
+  }
+}
 const port=Number(process.env.PORT)||8080;
 const root=process.cwd();
 const dist=join(root,'dist');
