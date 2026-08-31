@@ -23,7 +23,7 @@ function action(r:Room,pi:number,a:any){
   }
   if(a.kind==='discard'){
     const raw:Array<unknown>=Array.isArray(a.indices)?a.indices:[];
-    const inds:number[]=[...new Set(raw.filter((i):i is number=>Number.isInteger(i)&&i>=0&&i<p.hand.length))];
+    const inds:number[]=[]; for(const value of raw){if(typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<p.hand.length&&!inds.includes(value))inds.push(value);}
     if(!inds.length||inds.length>4)return err(r.clients[pi]!, 'Select 1–4 cards.');
     const cards=p.hand.filter((_:Card,i:number)=>inds.includes(i));
     p.hand=p.hand.filter((_:Card,i:number)=>!inds.includes(i));
@@ -33,7 +33,7 @@ function action(r:Room,pi:number,a:any){
   if(a.kind==='play'){
     const ni=a.node;
     const raw:Array<unknown>=Array.isArray(a.indices)?a.indices:[];
-    const inds:number[]=[...new Set(raw.filter((i):i is number=>Number.isInteger(i)&&i>=0&&i<p.hand.length))];
+    const inds:number[]=[]; for(const value of raw){if(typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<p.hand.length&&!inds.includes(value))inds.push(value);}
     if(!Number.isInteger(ni)||!s.nodes[ni]||!inds.length||inds.length>4)return err(r.clients[pi]!, 'Invalid selection.');
     const cards:Card[]=[s.nodes[ni] as Card,...inds.map(i=>p.hand[i])];
     const type=classify(cards);
