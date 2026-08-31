@@ -1,0 +1,5 @@
+{
+  "name":"node-attack-online","private":true,"version":"1.0.0",
+  "scripts":{"dev":"concurrently \"vite\" \"tsx server/index.ts\"","build":"tsc -b && vite build","start":"tsx server/index.ts"},
+  "dependencies":{"ws":"^8.18.3"},"devDependencies":{"@types/node":"^22.15.30","@types/ws":"^8.18.1","concurrently":"^9.1.2","tsx":"^4.19.4","typescript":"^5.8.3","vite":"^7.1.3"}
+}

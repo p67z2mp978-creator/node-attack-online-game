@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Node Attack</title>
+<style>
+*{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#10131a;color:#f5f7fb;touch-action:manipulation}
+button,select,input{font:inherit} button{cursor:pointer;border:0;border-radius:12px;padding:11px 15px;background:#2b3342;color:white;font-weight:700}
+button:hover{filter:brightness(1.12)}button:disabled{opacity:.4;cursor:not-allowed}
+.app{max-width:1200px;margin:auto;padding:16px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h1{margin:0;font-size:clamp(26px,5vw,42px)} .sub{color:#9da7b8}.panel{background:#191e28;border:1px solid #303847;border-radius:18px;padding:14px;margin-top:14px}
+.setup{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}.field label{display:block;color:#aab3c2;font-size:12px;margin-bottom:5px}.field select,.field input{width:100%;background:#0f131a;color:white;border:1px solid #394353;border-radius:10px;padding:10px}
+.hidden{display:none!important}.scorebar{display:flex;gap:10px;flex-wrap:wrap}.score{flex:1;min-width:150px;background:#11151d;border-radius:14px;padding:10px 13px}.score strong{font-size:18px}.active{outline:2px solid #7dd3fc}
+.board{display:grid;grid-template-columns:90px 1fr 90px;gap:12px;align-items:center}.pile{height:128px;border-radius:12px;background:linear-gradient(135deg,#263248,#111827);border:2px solid #64748b;display:flex;align-items:center;justify-content:center;font-size:12px;text-align:center;position:relative}
+.pile:after{content:"";position:absolute;inset:6px;border:1px solid #718096;border-radius:8px}.nodes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.node{min-height:128px;border:2px dashed #566176;border-radius:14px;background:#151a23;display:flex;align-items:center;justify-content:center;padding:8px;position:relative}.node.selected{border-color:#7dd3fc;box-shadow:0 0 0 3px #7dd3fc33}.node.empty{opacity:.3}
+.card{width:72px;height:102px;background:#fff;border-radius:9px;color:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 5px 12px #0006;user-select:none;flex:none}.card.red{color:#d22}.card .rank{font-size:25px;font-weight:900;line-height:1}.card .suit{font-size:27px}.hand{display:flex;gap:8px;overflow-x:auto;padding:10px 2px 16px;scrollbar-width:thin}.hand .card{transition:.15s transform,.15s outline}.hand .card.selected{transform:translateY(-12px);outline:3px solid #7dd3fc}
+.controls{display:flex;gap:8px;flex-wrap:wrap}.primary{background:#0ea5e9}.danger{background:#dc3545}.success{background:#16a34a}.muted{background:#4b5563}
+.toast{position:fixed;left:50%;top:18%;transform:translate(-50%,-50%);background:#0b1220ee;border:1px solid #7dd3fc;padding:15px 25px;border-radius:15px;text-align:center;z-index:20;pointer-events:none;animation:pop 1.2s ease both}.toast b{display:block;font-size:22px}@keyframes pop{0%{opacity:0;transform:translate(-50%,-40%) scale(.8)}15%,75%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0}}
+.chart{width:100%;border-collapse:collapse}.chart th,.chart td{border:1px solid #394353;padding:9px;text-align:center}.chart th:first-child,.chart td:first-child{text-align:left}.mark{font-size:26px;font-weight:900}.log{max-height:180px;overflow:auto;color:#b8c1d1;font-size:13px}.thinking{text-align:center;color:#fbbf24;font-weight:800;padding:8px}
+@media(max-width:700px){.app{padding:10px}.board{grid-template-columns:58px 1fr 58px;gap:6px}.pile{height:104px}.nodes{gap:5px}.node{min-height:104px}.card{width:61px;height:88px}.card .rank{font-size:21px}.card .suit{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div><h1>Node Attack</h1><div class="sub">Poker hands on four nodes • Cricket alternate ruleset</div></div>
+    <button id="newBtn" class="primary">New Game</button>
+  </div>
+
+  <div id="setup" class="panel">
+    <div class="setup">
+      <div class="field"><label>Game</label><select id="game"><option>Node Attack</option><option>Cricket</option></select></div>
+      <div class="field"><label>Multiplayer</label><select id="mode"><option>AI</option><option>Local Multiplayer</option><option>Online Multiplayer</option></select></div>
+      <div class="field"><label>Players</label><select id="players"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+      <div class="field"><label>Winning score</label><input id="winning" type="number" min="1" step="0.5" value="150"></div>
+    </div>
+    <div style="margin-top:12px"><button id="startBtn" class="success">Start Game</button></div>
+    <div id="onlineNote" class="sub" style="margin-top:8px">Online Multiplayer is reserved for a future online connection; the local game remains fully usable.</div>
+  </div>
+
+  <main id="gameUI" class="hidden">
+    <div id="scorebar" class="scorebar panel"></div>
+    <div class="panel">
+      <div id="turnLabel" style="font-weight:900;margin-bottom:8px"></div>
+      <div id="thinking" class="thinking hidden">🤖 AI Thinking…</div>
+      <div class="board">
+        <div class="pile" id="drawPile">DRAW<br>PILE</div>
+        <div class="nodes" id="nodes"></div>
+        <div class="pile" id="usedPile">USED<br>PILE</div>
+      </div>
+    </div>
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b id="handTitle">Your hand</b><span id="selectionInfo" class="sub"></span></div>
+      <div id="hand" class="hand"></div>
+      <div class="controls">
+        <button id="playBtn" class="primary">Play Selected</button>
+        <button id="discardBtn" class="danger">Discard Selected</button>
+        <button id="finishBtn" class="muted">Finish Turn</button>
+        <button id="clearBtn">Clear Selection</button>
+      </div>
+    </div>
+    <div id="cricketPanel" class="panel hidden"></div>
+    <div class="panel"><b>Game Log</b><div id="log" class="log"></div></div>
+  </main>
+</div>
+<script>
+"use strict";
+const SUITS=["♠","♥","♦","♣"], RANKS=["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
+const VALUES=Object.fromEntries(RANKS.map((r,i)=>[r,i+2]));
+const HAND_POINTS={"Two Pair":5,"Three of a Kind":10,"Straight":15,"Flush":20,"Full House":25,"Four of a Kind":50,"Straight Flush":75,"Royal Flush":100};
+const NODE_HANDS=["Two Pair","Three of a Kind","Straight","Flush","Full House","Four of a Kind","Straight Flush","Royal Flush"];
+const CRICKET_HANDS=["Two Pair","Three of a Kind","Straight","Flush","Full House","Four of a Kind"];
+let S=null, aiTimer=null;
+
+const $=id=>document.getElementById(id);
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function deck(){let d=[];for(const s of SUITS)for(const r of RANKS)d.push({s,r,id:s+r+Math.random()});return shuffle(d)}
+function draw(){if(!S.deck.length){if(S.used.length){S.deck=shuffle(S.used);S.used=[]}else return null}return S.deck.pop()}
+function cardHTML(c){if(!c)return"";return `<div class="card ${c.s==='♥'||c.s==='♦'?'red':''}"><div class="rank">${c.r}</div><div class="suit">${c.s}</div></div>`}
+function rankNums(cards){return cards.map(c=>VALUES[c.r]).sort((a,b)=>a-b)}
+function classify(cs){
+ if(cs.length<2||cs.length>5)return null;
+ let ns=rankNums(cs), counts={};cs.forEach(c=>counts[c.r]=(counts[c.r]||0)+1);
+ let vals=Object.values(counts).sort((a,b)=>b-a);
+ let flush=cs.length>=5 && cs.every(c=>c.s===cs[0].s);
+ let uniq=[...new Set(ns)], straight=false;
+ if(uniq.length===5) straight=(uniq[4]-uniq[0]===4)||(uniq.join(",")==="2,3,4,5,14");
+ if(cs.length===5&&flush&&straight){
+   let high=Math.max(...uniq); return high===14||high===13&&uniq.includes(14) ? "Royal Flush":"Straight Flush";
+ }
+ if(vals[0]===4)return "Four of a Kind";
+ if(vals[0]===3&&vals[1]===2)return "Full House";
+ if(flush)return "Flush";
+ if(straight)return "Straight";
+ if(vals[0]===3)return "Three of a Kind";
+ if(vals[0]===2&&vals[1]===2)return "Two Pair";
+ return null;
+}
+function allowed(type){if(!type)return false;if(S.game==="Cricket"&&S.players.some(p=>p.status[type]==="closed"))return false;return S.game==="Cricket"?CRICKET_HANDS.includes(type):NODE_HANDS.includes(type)}
+function combos(arr,k,start=0,out=[]){
+ if(k===0)return [[]];
+ let res=[];for(let i=start;i<=arr.length-k;i++)for(const tail of combos(arr,k-1,i+1))res.push([arr[i],...tail]);return res
+}
+function validPlays(hand,node){
+ let out=[];let max=S.game==="Cricket"?4:4;
+ for(let k=1;k<=max&&k<=hand.length;k++)for(const c of combos(hand,k)){
+   let type=classify([node,...c]); if(type&&allowed(type))out.push({cards:c,type,points:HAND_POINTS[type]});
+ }
+ return out
+}
+function currentPlayer(){return S.players[S.current]}
+function isHumanTurn(){return S.mode!=="AI"||S.current===0}
+function logMsg(x){S.log.unshift(x);$("log").innerHTML=S.log.map(x=>`<div>• ${x}</div>`).join("")}
+function toast(title,sub){let d=document.createElement("div");d.className="toast";d.innerHTML=`<b>${title}</b>${sub||""}`;document.body.appendChild(d);setTimeout(()=>d.remove(),1250)}
+function setupRound(first=false){
+ if(first)S.round=1;
+ S.deck=deck();S.used=[];S.nodes=[draw(),draw(),draw(),draw()];
+ for(const p of S.players)p.hand=[];S.players.forEach(p=>{for(let i=0;i<6;i++)p.hand.push(draw())});
+ S.selected=[];S.node=null;S.turnCombos=0;render();
+}
+function refill(p){while(p.hand.length<6){let c=draw();if(!c)break;p.hand.push(c)}}
+function start(){
+ clearTimeout(aiTimer);
+ let n=+$("players").value, mode=$("mode").value, game=$("game").value;
+ if(mode==="AI")n=2;
+ S={game,mode,winning:+$("winning").value||150,players:Array.from({length:n},(_,i)=>({name:i===0?"Player 1":mode==="AI"&&i===1?"AI":"Player "+(i+1),score:0,hand:[],status:Object.fromEntries(CRICKET_HANDS.map(h=>[h,""]))})),current:0,deck:[],used:[],nodes:[],selected:[],node:null,turnCombos:0,round:1,log:[],over:false};
+ $("setup").classList.add("hidden");$("gameUI").classList.remove("hidden");setupRound(true);logMsg(`${game} started.`);render();
+}
+function render(){
+ if(!S)return;
+ $("scorebar").innerHTML=S.players.map((p,i)=>`<div class="score ${i===S.current?"active":""}"><strong>${p.name}</strong><br>${p.score}${S.game==="Node Attack"?` / ${S.winning}`:""}</div>`).join("");
+ $("turnLabel").textContent=S.over?"Game Over":`Round ${S.round} • ${currentPlayer().name}'s turn`;
+ $("thinking").classList.toggle("hidden",!(S.mode==="AI"&&S.current===1&&!S.over));
+ $("nodes").innerHTML=S.nodes.map((c,i)=>c?`<div class="node ${S.node===i?"selected":""}" data-node="${i}">${cardHTML(c)}</div>`:`<div class="node empty"></div>`).join("");
+ $("drawPile").innerHTML=`DRAW<br>PILE<br><b>${S.deck.length}</b>`;
+ $("usedPile").innerHTML=`USED<br>PILE<br><b>${S.used.length}</b>`;
+ const human=currentPlayer(); $("handTitle").textContent=S.mode==="AI"&&S.current===1?"AI hand (hidden)":`${human.name}'s hand`;
+ $("hand").innerHTML=isHumanTurn()?human.hand.map((c,i)=>`<div data-card="${i}" >${cardHTML(c).replace('class="card', `class="card ${S.selected.includes(i)?"selected":""}`)}</div>`).join(""):`<div class="sub">Waiting for ${human.name}…</div>`;
+ $("selectionInfo").textContent=S.selected.length?`${S.selected.length} card(s) selected${S.node!==null?" • node "+(S.node+1):""}`:"";
+ $("playBtn").disabled=!isHumanTurn()||S.node===null||!S.selected.length||S.over;
+ $("discardBtn").disabled=!isHumanTurn()||!S.selected.length||S.turnCombos>0||S.over;
+ $("finishBtn").disabled=!isHumanTurn()||S.over;
+ $("cricketPanel").classList.toggle("hidden",S.game!=="Cricket");
+ if(S.game==="Cricket")renderCricket();
+}
+function renderCricket(){
+ let h=`<b>Cricket Chart</b><table class="chart"><tr><th>Hand</th>${S.players.map(p=>`<th>${p.name}</th>`).join("")}</tr>`;
+ for(const type of CRICKET_HANDS)h+=`<tr><td>${type}</td>${S.players.map(p=>`<td class="mark">${p.status[type]==="open"?"○":p.status[type]==="closed"?"⊗":""}</td>`).join("")}</tr>`;
+ $("cricketPanel").innerHTML=h+"</table>";
+}
+function selectNode(i){if(!isHumanTurn()||!S.nodes[i]||S.over)return;S.node=S.node===i?null:i;render()}
+function selectCard(i){if(!isHumanTurn()||S.over)return;let p=currentPlayer();if(S.selected.includes(i))S.selected=S.selected.filter(x=>x!==i);else if(S.selected.length<4)S.selected.push(i);render()}
+function playSelected(){
+ if(!isHumanTurn()||S.node===null||!S.selected.length||S.over)return;
+ let p=currentPlayer(), node=S.nodes[S.node], chosen=S.selected.map(i=>p.hand[i]), play=validPlays(p.hand.filter((_,i)=>S.selected.includes(i)),node)[0];
+ let type=classify([node,...chosen]);
+ if(!type||!allowed(type)){toast("Illegal hand","Selected cards do not form a scoring hand");return}
+ scoreNode(S.node,S.selected.slice(),type);
+}
+function scoreNode(ni,indices,type){
+ let p=currentPlayer(), node=S.nodes[ni], cards=[node,...indices.map(i=>p.hand[i])];
+ let base=HAND_POINTS[type], mult=S.game==="Node Attack"?[1,1.5,2,3][S.turnCombos]||3:1;
+ let gained=0;
+ if(S.game==="Node Attack"){gained=base*mult;p.score+=gained}
+ else{
+   let st=p.status[type];
+   // In Cricket, an open hand can score on the second occurrence.
+   // Once an opponent closes it, the hand is closed for everyone and
+   // neither player may score that hand type anymore.
+   let globallyClosed=S.players.some(op=>op.status[type]==="closed");
+   if(globallyClosed){
+     logMsg(`${p.name} played ${type}, but it is closed and cannot score.`);
+   } else if(st===""){
+     p.status[type]="open";logMsg(`${p.name} opened ${type} in Cricket.`)
+   } else if(st==="open"){
+     p.score+=base;gained=base;logMsg(`${p.name} scored ${type} for ${base} points.`)
+   }
+   // If the opponent has this hand open, this play closes the hand for both players.
+   for(const op of S.players)if(op!==p&&op.status[type]==="open"){
+     for(const q of S.players)q.status[type]="closed";
+     logMsg(`${p.name} closed ${type} for everyone.`);
+     break;
+   }
+ }
+ p.hand=p.hand.filter((_,i)=>!indices.includes(i));S.used.push(...cards);S.nodes[ni]=null;S.selected=[];S.node=null;S.turnCombos++;
+ toast(type,gained?`+${gained}`:S.game==="Cricket"?"OPEN":"");
+ logMsg(`${p.name} played ${type}${gained?" for "+gained+" points.":""}`);
+ if(S.nodes.every(x=>!x)){endRound();return}
+ render();
+}
+function discard(){
+ if(!isHumanTurn()||!S.selected.length||S.turnCombos>0||S.over)return;
+ let p=currentPlayer(),cards=S.selected.map(i=>p.hand[i]);p.hand=p.hand.filter((_,i)=>!S.selected.includes(i));S.used.push(...cards);
+ logMsg(`${p.name} discarded ${cards.length} cards.`);finishTurn();
+}
+function finishTurn(){
+ if(S.over)return;refill(currentPlayer());S.current=(S.current+1)%S.players.length;S.turnCombos=0;S.selected=[];S.node=null;render();maybeAI();
+}
+function endRound(){
+ refill(currentPlayer());S.round++;S.current=(S.current+1)%S.players.length;
+ if(S.players.some(p=>p.score>=S.winning)&&S.game==="Node Attack"||S.game==="Cricket"&&S.players.some(p=>p.status && Object.values(p.status).every(x=>x!==""))){
+   S.over=true;let winner=S.players.reduce((a,b)=>a.score>b.score?a:b);logMsg(`${winner.name} wins!`);toast("GAME OVER",`${winner.name} wins`);
+   render();return;
+ }
+ setupRound();logMsg(`Round ${S.round} started. ${currentPlayer().name} starts.`);maybeAI();
+}
+function aiMove(){
+ if(!S||S.over||S.mode!=="AI"||S.current!==1)return;
+
+ const p=S.players[1];
+ let best=null;
+
+ // Find the best currently legal scoring play.
+ for(let ni=0;ni<S.nodes.length;ni++){
+   if(!S.nodes[ni])continue;
+   for(let k=1;k<=4&&k<=p.hand.length;k++){
+     for(const inds of combos(p.hand,k)){
+       const type=classify([S.nodes[ni],...inds]);
+       if(!type||!allowed(type))continue;
+
+       // In Cricket, a globally closed hand can never be scored.
+       if(S.game==="Cricket" && S.players.some(q=>q.status[type]==="closed"))continue;
+
+       let value=HAND_POINTS[type];
+       if(S.game==="Cricket" && p.status[type]==="open")value+=1000;
+       // Prefer higher-value hands, then fewer cards.
+       const candidate={ni,inds,type,value};
+       if(!best ||
+          candidate.value>best.value ||
+          candidate.value===best.value && inds.length<best.inds.length){
+         best=candidate;
+       }
+     }
+   }
+ }
+
+ if(best){
+   const indices=best.inds.map(c=>p.hand.indexOf(c));
+
+   // scoreNode can trigger a round change. After it returns, only
+   // continue if the AI still owns the turn.
+   scoreNode(best.ni,indices,best.type);
+
+   if(S && !S.over && S.mode==="AI" && S.current===1){
+     aiTimer=setTimeout(aiMove,500);
+   }
+   return;
+ }
+
+ // No legal scoring play remains.
+ // If the AI has not scored anything this turn, it must discard 1–4 cards.
+ // If it already scored, discarding is forbidden, so it simply finishes.
+ if(S && !S.over && S.current===1){
+   if(S.turnCombos===0){
+     const count=Math.min(4,Math.max(1,p.hand.length));
+     const indices=Array.from({length:count},(_,i)=>i);
+     const discarded=indices.map(i=>p.hand[i]);
+     p.hand=p.hand.filter((_,i)=>!indices.includes(i));
+     S.used.push(...discarded);
+     logMsg(`AI discarded ${discarded.length} cards.`);
+     finishTurn();
+   }else{
+     logMsg("AI has no further scoring play and finishes its turn.");
+     finishTurn();
+   }
+ }
+}
+function maybeAI(){if(S&&S.mode==="AI"&&S.current===1&&!S.over){clearTimeout(aiTimer);render();aiTimer=setTimeout(aiMove,2000)}}
+$("startBtn").onclick=start;$("newBtn").onclick=()=>{$("setup").classList.remove("hidden");$("gameUI").classList.add("hidden");clearTimeout(aiTimer)}
+$("nodes").onclick=e=>{let n=e.target.closest(".node");if(n)selectNode(+n.dataset.node)}
+$("hand").onclick=e=>{let c=e.target.closest("[data-card]");if(c)selectCard(+c.dataset.card)}
+$("playBtn").onclick=playSelected;$("discardBtn").onclick=discard;$("finishBtn").onclick=finishTurn;$("clearBtn").onclick=()=>{S.selected=[];S.node=null;render()}
+$("game").onchange=()=>{$("winning").disabled=$("game").value==="Cricket"}
+$("mode").onchange=()=>{$("players").disabled=$("mode").value==="AI"}
+</script>
+</body>
+</html>
